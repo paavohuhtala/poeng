@@ -50,6 +50,16 @@ pub enum BitDepth {
     B16,
 }
 
+impl BitDepth {
+    pub fn to_bytes(&self) -> usize {
+        match self {
+            BitDepth::B8 => 1,
+            BitDepth::B16 => 2,
+            otherwise => panic!("unsupported bit depth: {:?}", otherwise),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum ColourType {
     Greyscale,
@@ -57,6 +67,18 @@ pub enum ColourType {
     IndexedColour,
     GreyscaleWithAlpha,
     TruecolourWithAlpha,
+}
+
+impl ColourType {
+    pub fn channel_count(self) -> usize {
+        match self {
+            ColourType::Greyscale => 1,
+            ColourType::Truecolour => 3,
+            ColourType::IndexedColour => 1,
+            ColourType::GreyscaleWithAlpha => 1,
+            ColourType::TruecolourWithAlpha => 4,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -67,7 +89,7 @@ pub enum InterlaceMethod {
 
 pub struct PngChunk {
     length: u32,
-    chunk_type: ChunkType,
+    pub chunk_type: ChunkType,
     pub(crate) data: Vec<u8>,
     crc: [u8; 4],
 }
@@ -84,8 +106,8 @@ impl std::fmt::Debug for PngChunk {
 
 #[derive(Debug)]
 pub struct PngHeader {
-    pub(crate) width: u32,
-    pub(crate) height: u32,
+    pub width: u32,
+    pub height: u32,
     pub(crate) bit_depth: BitDepth,
     pub(crate) colour_type: ColourType,
     pub(crate) interlace_method: InterlaceMethod,
@@ -132,14 +154,14 @@ impl<'a> TryFrom<&'a PngChunk> for PngHeader {
             (
                 ColourType::Greyscale,
                 BitDepth::B1 | BitDepth::B2 | BitDepth::B4 | BitDepth::B8 | BitDepth::B16,
-            ) => (),
-            (ColourType::Truecolour, BitDepth::B8 | BitDepth::B16) => (),
-            (
+            )
+            | (ColourType::Truecolour, BitDepth::B8 | BitDepth::B16)
+            | (
                 ColourType::IndexedColour,
                 BitDepth::B1 | BitDepth::B2 | BitDepth::B4 | BitDepth::B8,
-            ) => (),
-            (ColourType::GreyscaleWithAlpha, BitDepth::B8 | BitDepth::B16) => (),
-            (ColourType::TruecolourWithAlpha, BitDepth::B8 | BitDepth::B16) => (),
+            )
+            | (ColourType::GreyscaleWithAlpha, BitDepth::B8 | BitDepth::B16)
+            | (ColourType::TruecolourWithAlpha, BitDepth::B8 | BitDepth::B16) => (),
             (colour_type, bit_depth) => {
                 return Err(PngError::InvalidBitDepthColourCombination {
                     colour_type,

@@ -9,6 +9,7 @@ edition = "2021"
 inflate = "0.4.5"
 byteorder = "1.4.3"
 thiserror = "1.0.24"
+image = "0.23.14"
 
 [lib]
 name = "poeng"
