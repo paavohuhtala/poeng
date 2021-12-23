@@ -1,0 +1,20 @@
+[package]
+name = "poeng"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+inflate = "0.4.5"
+byteorder = "1.4.3"
+thiserror = "1.0.24"
+
+[lib]
+name = "poeng"
+path = "src/lib.rs"
+
+[[bin]]
+name = "png-decode"
+path = "src/bin.rs"
+
