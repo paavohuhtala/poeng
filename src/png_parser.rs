@@ -3,6 +3,8 @@ use std::io::{Cursor, Read};
 use byteorder::{BigEndian, ReadBytesExt};
 use thiserror::Error;
 
+use crate::decoder::decode_data;
+
 const MAGIC: [u8; 8] = [137, 80, 78, 71, 13, 10, 26, 10];
 
 #[derive(Error, Debug)]
@@ -113,6 +115,16 @@ pub struct PngHeader {
     pub(crate) interlace_method: InterlaceMethod,
 }
 
+impl PngHeader {
+    pub fn bit_depth(&self) -> BitDepth {
+        self.bit_depth
+    }
+
+    pub fn colour_type(&self) -> ColourType {
+        self.colour_type
+    }
+}
+
 impl<'a> TryFrom<&'a PngChunk> for PngHeader {
     type Error = PngError;
 
@@ -213,6 +225,46 @@ impl PngFile {
     pub fn try_parse_header(&self) -> Result<PngHeader, PngError> {
         PngHeader::try_from(self.get_header_chunk())
     }
+
+    pub fn from_reader<R: std::io::Read>(reader: &mut R) -> Result<Self, PngError> {
+        let mut magic = [0u8; 8];
+        reader.read_exact(&mut magic)?;
+
+        if magic != MAGIC {
+            return Err(PngError::InvalidMagic);
+        }
+
+        let mut chunks = Vec::new();
+
+        loop {
+            let chunk = parse_png_chunk(reader)?;
+            let chunk_type = chunk.chunk_type;
+            chunks.push(chunk);
+
+            if chunk_type == ChunkType::IEND {
+                break;
+            }
+        }
+
+        Ok(PngFile { chunks })
+    }
+
+    fn image_data_chunks(&self) -> impl Iterator<Item = &PngChunk> {
+        self.chunks
+            .iter()
+            .filter(|chunk| chunk.chunk_type == ChunkType::IDAT)
+    }
+
+    pub fn decode_data(&self) -> Result<Vec<u8>, PngError> {
+        let mut buffer = Vec::new();
+        self.decode_data_to(&mut buffer)?;
+        Ok(buffer)
+    }
+
+    pub fn decode_data_to(&self, out: &mut Vec<u8>) -> Result<(), PngError> {
+        let header = self.try_parse_header()?;
+        decode_data(&header, self.image_data_chunks(), out)
+    }
 }
 
 fn parse_png_chunk<R: std::io::Read>(reader: &mut R) -> Result<PngChunk, PngError> {
@@ -240,27 +292,4 @@ fn parse_png_chunk<R: std::io::Read>(reader: &mut R) -> Result<PngChunk, PngErro
         data,
         crc,
     })
-}
-
-pub fn parse_png<R: std::io::Read>(reader: &mut R) -> Result<PngFile, PngError> {
-    let mut magic = [0u8; 8];
-    reader.read_exact(&mut magic)?;
-
-    if magic != MAGIC {
-        return Err(PngError::InvalidMagic);
-    }
-
-    let mut chunks = Vec::new();
-
-    loop {
-        let chunk = parse_png_chunk(reader)?;
-        let chunk_type = chunk.chunk_type;
-        chunks.push(chunk);
-
-        if chunk_type == ChunkType::IEND {
-            break;
-        }
-    }
-
-    Ok(PngFile { chunks })
 }

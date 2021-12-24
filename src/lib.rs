@@ -1,4 +1,4 @@
-pub mod decoder;
+mod decoder;
 pub mod png_parser;
 
 #[cfg(test)]

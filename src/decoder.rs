@@ -1,4 +1,8 @@
-use crate::png_parser::{BitDepth, ChunkType, PngChunk, PngError, PngHeader};
+use std::io::Write;
+
+use inflate::InflateWriter;
+
+use crate::png_parser::{ChunkType, PngChunk, PngError, PngHeader};
 
 fn filter_none(
     x: u8,
@@ -85,26 +89,34 @@ fn paeth_predictor(a: u8, b: u8, c: u8) -> u8 {
     }
 }
 
-pub fn decode_data(header: &PngHeader, data: &PngChunk) -> Result<Vec<u8>, PngError> {
-    assert_eq!(header.bit_depth, BitDepth::B8, "bit depth must be 8");
-    assert_eq!(data.chunk_type, ChunkType::IDAT);
+pub fn decode_data<'a>(
+    header: &'a PngHeader,
+    chunks: impl Iterator<Item = &'a PngChunk>,
+    decoded_data_out: &mut Vec<u8>,
+) -> Result<(), PngError> {
+    let mut inflate_writer = InflateWriter::from_zlib(Vec::new());
 
-    let decompressed = inflate::inflate_bytes_zlib(&data.data).map_err(PngError::InflateError)?;
+    for chunk in chunks {
+        assert_eq!(chunk.chunk_type, ChunkType::IDAT);
+        inflate_writer.write_all(&chunk.data)?;
+    }
+
+    let decompressed = inflate_writer.finish()?;
 
     // TODO: handle 1-4 bit depth
     let bytes_per_channel = header.bit_depth.to_bytes();
     let number_of_channels = header.colour_type.channel_count();
-
     let bytes_per_pixel = number_of_channels * bytes_per_channel;
 
     let scanline_length = header.width as usize * bytes_per_pixel;
     let scanline_length_with_filter = scanline_length + 1;
 
-    let mut decoded_data = vec![0u8; scanline_length * header.height as usize];
+    decoded_data_out.resize(scanline_length * header.height as usize, 0);
+
     let mut previous_scanline = vec![0u8; scanline_length];
 
     let input_chunks = decompressed.chunks_exact(scanline_length_with_filter);
-    let output_chunks = decoded_data.chunks_exact_mut(scanline_length);
+    let output_chunks = decoded_data_out.chunks_exact_mut(scanline_length);
 
     for (scanline_in, scanline_out) in input_chunks.zip(output_chunks) {
         let (filter_type, scanline_in) = scanline_in.split_first().unwrap();
@@ -139,5 +151,5 @@ pub fn decode_data(header: &PngHeader, data: &PngChunk) -> Result<Vec<u8>, PngEr
         previous_scanline.copy_from_slice(scanline_out);
     }
 
-    Ok(decoded_data)
+    Ok(())
 }
